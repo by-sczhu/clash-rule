@@ -197,6 +197,7 @@ payload:
   - DOMAIN-SUFFIX,pterclub.net
   - DOMAIN-SUFFIX,crabpt.vip
   - DOMAIN-SUFFIX,ptfans.cc
+  - DOMAIN-SUFFIX,kamept.com
   - DOMAIN-KEYWORD,amp-api.podcasts.apple.com
   - DOMAIN-KEYWORD,anti-ad.net
   - DOMAIN-KEYWORD,api-adservices.apple.com
@@ -235,6 +236,7 @@ payload:
   - DOMAIN-KEYWORD,westlawchina
   - DOMAIN-KEYWORD,crabpt
   - DOMAIN-KEYWORD,ptfans
+  - DOMAIN-KEYWORD,kamept
   - PROCESS-NAME,BaiduNetdisk_mac
   - PROCESS-NAME,BitComet
   - PROCESS-NAME,ClashX
