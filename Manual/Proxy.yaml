@@ -3,3 +3,5 @@ payload:
   - DOMAIN-SUFFIX,asuswrt-merlin.net
   - DOMAIN-KEYWORD,debian
   - DOMAIN-SUFFIX,debian.org
+  - DOMAIN-KEYWORD,freenom
+  - DOMAIN-SUFFIX,freenom.com
