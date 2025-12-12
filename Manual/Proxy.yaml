@@ -1,4 +1,5 @@
 payload:
   - DOMAIN-KEYWORD,asuswrt-merlin
   - DOMAIN-SUFFIX,asuswrt-merlin.net
-
+  - DOMAIN-KEYWORD,debian
+  - DOMAIN-SUFFIX,debian.org
