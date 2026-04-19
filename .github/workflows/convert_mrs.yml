@@ -1,0 +1,75 @@
+name: MRS Ruleset Converter
+
+on:
+  push:
+    paths:
+      - 'Manual/*.yaml'      # 只要 Manual 文件夹下的 yaml 有变动就触发
+  workflow_dispatch:          # 支持手动点击运行按钮
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    # 显式声明权限，确保可以推送到仓库
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Mihomo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "正在获取 Mihomo 最新版本信息..."
+          # 使用 GitHub CLI 获取最新版下载链接，更稳定且自带认证
+          DOWNLOAD_URL=$(gh release view --repo MetaCubeX/mihomo --json assets \
+            -q '.assets[] | select(.name | contains("linux-amd64") and endswith(".tar.gz")) | .browser_download_url' | head -n 1)
+          
+          if [ -z "$DOWNLOAD_URL" ]; then
+            echo "错误：未能获取到下载链接，请检查网络或 GitHub API 状态。"
+            exit 1
+          fi
+
+          echo "正在从 $DOWNLOAD_URL 下载..."
+          curl -L -o mihomo.tar.gz "$DOWNLOAD_URL"
+          
+          # 解压并重命名二进制文件
+          tar -xzf mihomo.tar.gz
+          find . -maxdepth 1 -type f -name "mihomo*" ! -name "*.tar.gz" -exec mv {} mihomo \;
+          chmod +x mihomo
+          ./mihomo -v
+
+      - name: Batch Convert Rulesets
+        run: |
+          # 检查目录是否存在
+          if [ ! -d "Manual" ]; then
+            echo "错误：未找到 Manual 文件夹。"
+            exit 1
+          fi
+
+          # 遍历所有 yaml 文件
+          for file in Manual/*.yaml; do
+            [ -e "$file" ] || continue # 防止文件夹为空时报错
+            filename=$(basename "$file" .yaml)
+            echo "正在转换: $filename.yaml -> $filename.mrs"
+            
+            # 执行转换逻辑
+            ./mihomo convert-ruleset text "$file" "Manual/$filename.mrs"
+          done
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 暂存所有生成的 .mrs 文件
+          git add Manual/*.mrs
+          
+          # 检查是否有文件更新，避免产生空提交
+          if git diff --staged --quiet; then
+            echo "没有任何变动，无需推送。"
+          else
+            git commit -m "auto: 自动更新二进制规则集 [skip ci]"
+            git push
+          fi
