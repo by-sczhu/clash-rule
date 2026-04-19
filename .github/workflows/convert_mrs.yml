@@ -21,27 +21,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo ">>> 正在通过官方渠道下载 Mihomo..."
-          # 自动寻找最新 Release 并下载匹配 linux-amd64 且以 .tar.gz 结尾的文件
-          gh release download --repo MetaCubeX/mihomo --pattern "*linux-amd64*tar.gz" --limit 1
+          # 去掉不支持的 --limit 参数，使用更通用的通配符模式
+          gh release download --repo MetaCubeX/mihomo --pattern "mihomo-linux-amd64-v*.tar.gz"
           
           echo ">>> 正在解压..."
-          # 使用通配符解压下载到的文件
           tar -xzf *.tar.gz
           
           echo ">>> 准备二进制文件..."
-          # 找到那个不带 .tar.gz 后缀的可执行文件并改名
-          find . -maxdepth 1 -type f -name "mihomo*" ! -name "*.tar.gz" -exec mv {} ./mihomo \;
+          # 将解压出来的内核重命名为 mihomo
+          find . -maxdepth 1 -type f -name "mihomo-linux-amd64*" ! -name "*.tar.gz" -exec mv {} ./mihomo \;
           chmod +x ./mihomo
           ./mihomo -v
 
       - name: Batch Convert Rulesets
         run: |
-          # 定位目录
+          # 自动识别目录名大小写
           TARGET_DIR="Manual"
           if [ ! -d "$TARGET_DIR" ]; then TARGET_DIR="manual"; fi
           
           if [ ! -d "$TARGET_DIR" ]; then
             echo "错误：未发现 Manual 或 manual 目录！"
+            ls -R
             exit 1
           fi
 
