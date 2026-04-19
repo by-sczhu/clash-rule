@@ -17,31 +17,31 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Mihomo
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "正在使用 GitHub 官方工具下载 Mihomo..."
-          # 使用 gh 官方工具直接下载最新 Release 中的 linux-amd64 压缩包
-          # 这种方式不依赖拼凑 URL，最稳健
-          gh release download --repo MetaCubeX/mihomo --pattern "*linux-amd64*tar.gz" --limit 1
+          echo "开始下载 Mihomo..."
+          # 直接使用 MetaCubeX 官方固定的最新版跳转链接，速度最快
+          curl -L -o mihomo.tar.gz "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz"
           
-          # 确认文件下载成功
-          ls -lh *.tar.gz
+          echo "正在解压..."
+          tar -xzf mihomo.tar.gz
           
-          # 解压并寻找二进制文件
-          tar -xzf *.tar.gz
-          find . -maxdepth 1 -type f -name "mihomo*" ! -name "*.tar.gz" -exec mv {} mihomo \;
+          echo "重命名二进制文件..."
+          # 这样写可以无视版本号，直接抓取解压出来的那个可执行文件
+          mv mihomo-linux-amd64* mihomo
           chmod +x ./mihomo
+          
+          echo "当前 Mihomo 版本:"
           ./mihomo -v
 
       - name: Batch Convert Rulesets
         run: |
-          # 确保进入工作目录并遍历 Manual 下的 yaml
-          for file in Manual/*.yaml; do
+          echo "进入 Manual 文件夹转换..."
+          cd Manual
+          for file in *.yaml; do
             [ -e "$file" ] || continue
-            filename=$(basename "$file" .yaml)
-            echo "正在转换: $filename.yaml -> $filename.mrs"
-            ./mihomo convert-ruleset text "$file" "Manual/$filename.mrs"
+            filename="${file%.yaml}"
+            echo "转换中: $file -> $filename.mrs"
+            ../mihomo convert-ruleset text "$file" "$filename.mrs"
           done
 
       - name: Commit and Push Changes
@@ -51,8 +51,9 @@ jobs:
           
           git add Manual/*.mrs
           if git diff --staged --quiet; then
-            echo "无内容变动，跳过推送。"
+            echo "检查结果：没有文件发生变动。"
           else
+            echo "发现变动，正在推送..."
             git commit -m "auto: 自动更新二进制规则集 [skip ci]"
             git push
           fi
