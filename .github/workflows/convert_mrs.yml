@@ -20,28 +20,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "尝试通过 GitHub API 获取最新版本..."
-          # 尝试获取最新链接
-          DOWNLOAD_URL=$(gh release view --repo MetaCubeX/mihomo --json assets \
-            -q '.assets[] | select(.name | contains("linux-amd64") and endswith(".tar.gz")) | .browser_download_url' | head -n 1)
+          echo "正在使用 GitHub 官方工具下载 Mihomo..."
+          # 使用 gh 官方工具直接下载最新 Release 中的 linux-amd64 压缩包
+          # 这种方式不依赖拼凑 URL，最稳健
+          gh release download --repo MetaCubeX/mihomo --pattern "*linux-amd64*tar.gz" --limit 1
           
-          # 如果 API 获取失败，则使用手动指定的稳定版（兜底方案）
-          if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" == "null" ]; then
-            echo "API 响应超时或为空，切换到兜底下载链接..."
-            DOWNLOAD_URL="https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz"
-          fi
-
-          echo "正在从 $DOWNLOAD_URL 下载..."
-          curl -L -o mihomo.tar.gz "$DOWNLOAD_URL"
+          # 确认文件下载成功
+          ls -lh *.tar.gz
           
           # 解压并寻找二进制文件
-          tar -xzf mihomo.tar.gz
+          tar -xzf *.tar.gz
           find . -maxdepth 1 -type f -name "mihomo*" ! -name "*.tar.gz" -exec mv {} mihomo \;
-          chmod +x mihomo
+          chmod +x ./mihomo
           ./mihomo -v
 
       - name: Batch Convert Rulesets
         run: |
+          # 确保进入工作目录并遍历 Manual 下的 yaml
           for file in Manual/*.yaml; do
             [ -e "$file" ] || continue
             filename=$(basename "$file" .yaml)
@@ -53,10 +48,11 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
           git add Manual/*.mrs
           if git diff --staged --quiet; then
-            echo "无内容变动。"
+            echo "无内容变动，跳过推送。"
           else
-            git commit -m "auto: update mrs rulesets [skip ci]"
+            git commit -m "auto: 自动更新二进制规则集 [skip ci]"
             git push
           fi
