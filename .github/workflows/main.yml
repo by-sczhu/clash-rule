@@ -1,34 +1,51 @@
-name: Convert Ruleset to MRS
+name: MRS Ruleset Converter
 on:
   push:
     paths:
-      - 'Manual/*.yaml'  # 监控 Manual 文件夹下所有 yaml 变动
-  workflow_dispatch:      # 允许手动点击运行
+      - 'Manual/*.yaml'      # 监控 Manual 文件夹下所有 yaml 变动
+  workflow_dispatch:          # 允许在 Actions 页面点击手动运行
 
 jobs:
   convert:
     runs-on: ubuntu-latest
+    # 授予 Actions 读写仓库的权限
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Mihomo
         run: |
-          # 获取最新版 Mihomo 核心
-          RELEASE_JSON=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest)
-          DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep -oP '"browser_download_url": "\K[^"]*linux-amd64[^"]*.gz' | head -n 1)
+          # 1. 获取最新 Release 的下载链接 (精准匹配 linux-amd64 和 .tar.gz)
+          API_URL="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
+          DOWNLOAD_URL=$(curl -s $API_URL | jq -r '.assets[] | select(.name | contains("linux-amd64") and endswith(".tar.gz")) | .browser_download_url' | head -n 1)
+          
+          echo "正在从 $DOWNLOAD_URL 下载 Mihomo..."
           curl -L -o mihomo.tar.gz "$DOWNLOAD_URL"
+          
+          # 2. 解压文件
+          # 使用 --wildcards 兼容不同的压缩包内文件路径
           tar -xzf mihomo.tar.gz
-          # 重命名解压出的文件为 mihomo (由于版本号不同，通过通配符匹配)
-          mv mihomo-linux-amd64* mihomo 2>/dev/null || true
+          
+          # 3. 寻找二进制文件并重命名为 mihomo
+          # 排除掉压缩包本身，找到解压出的执行文件
+          find . -maxdepth 1 -type f -name "mihomo*" ! -name "*.tar.gz" -exec mv {} mihomo \;
           chmod +x mihomo
+          
+          # 打印版本确认安装成功
+          ./mihomo -v
 
       - name: Batch Convert YAML to MRS
         run: |
-          # 遍历 Manual 文件夹下所有 yaml 文件并转换
+          # 进入 Manual 目录进行批量转换
           for file in Manual/*.yaml; do
+            # 获取不带后缀的文件名
             filename=$(basename "$file" .yaml)
-            echo "Converting $filename.yaml to $filename.mrs..."
+            echo "正在转换: $filename.yaml -> $filename.mrs"
+            
+            # 执行转换命令
             ./mihomo convert-ruleset text "$file" "Manual/$filename.mrs"
           done
 
@@ -36,11 +53,12 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 只有在 .mrs 文件有实际变动时才提交
           git add Manual/*.mrs
-          # 仅在有变动时提交
-          if ! git diff --staged --quiet; then
-            git commit -m "auto: update mrs rulesets"
-            git push
+          if git diff --staged --quiet; then
+            echo "没有发现内容变化，跳过提交。"
           else
-            echo "No changes to commit"
+            git commit -m "auto: update mrs binary rulesets [skip ci]"
+            git push
           fi
