@@ -19,27 +19,39 @@ jobs:
       - name: Setup Mihomo
         run: |
           echo ">>> 正在下载 Mihomo 内核..."
-          # 使用 --connect-timeout 防止卡死
-          curl -L --connect-timeout 10 -o mihomo.tar.gz "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz"
+          curl -L -o mihomo.tar.gz "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz"
           
-          echo ">>> 正在解压..."
+          echo ">>> 正在解压并列出文件..."
           tar -xzf mihomo.tar.gz
+          ls -R # 调试：列出解压后的所有文件
           
-          # 自动寻找解压出来的执行文件（处理可能的版本号后缀）
-          EXECUTABLE=$(find . -name "mihomo-linux-amd64*" | head -n 1)
-          mv "$EXECUTABLE" ./mihomo
+          echo ">>> 寻找并重命名执行文件..."
+          # 更加稳健的寻找方式
+          find . -name "mihomo-linux-amd64*" -exec mv {} ./mihomo \;
           chmod +x ./mihomo
-          echo ">>> 内核准备就绪:"
+          
+          echo ">>> 验证内核是否可用..."
           ./mihomo -v
 
       - name: Batch Convert Rulesets
         run: |
-          echo ">>> 开始批量转换 Manual 目录下的规则..."
-          # 直接在当前路径执行，使用相对路径调用内核
-          for file in Manual/*.yaml; do
+          echo ">>> 检查 Manual 目录是否存在..."
+          # 自动兼容大小写问题
+          TARGET_DIR=""
+          if [ -d "Manual" ]; then TARGET_DIR="Manual"; elif [ -d "manual" ]; then TARGET_DIR="manual"; fi
+          
+          if [ -z "$TARGET_DIR" ]; then
+            echo "错误：找不到 Manual 或 manual 文件夹！"
+            ls -F # 调试：列出根目录所有内容
+            exit 1
+          fi
+
+          echo ">>> 开始在 $TARGET_DIR 目录下转换..."
+          for file in $TARGET_DIR/*.yaml; do
             if [ -f "$file" ]; then
               filename="${file%.yaml}"
               echo "转换: $file -> $filename.mrs"
+              # 使用完整路径防止出错
               ./mihomo convert-ruleset text "$file" "$filename.mrs"
             fi
           done
@@ -49,12 +61,10 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          git add Manual/*.mrs
-          # 检查暂存区是否有变化
+          git add .
           if git diff --cached --quiet; then
-            echo ">>> 无内容更新，跳过提交。"
+            echo ">>> 无变动。"
           else
-            echo ">>> 正在提交更新到仓库..."
-            git commit -m "auto: 自动更新二进制规则集 [skip ci]"
+            git commit -m "auto: update mrs [skip ci]"
             git push
           fi
