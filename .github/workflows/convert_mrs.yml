@@ -17,43 +17,40 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Mihomo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo ">>> 正在下载 Mihomo 内核..."
-          curl -L -o mihomo.tar.gz "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz"
+          echo ">>> 正在通过官方渠道下载 Mihomo..."
+          # 自动寻找最新 Release 并下载匹配 linux-amd64 且以 .tar.gz 结尾的文件
+          gh release download --repo MetaCubeX/mihomo --pattern "*linux-amd64*tar.gz" --limit 1
           
-          echo ">>> 正在解压并列出文件..."
-          tar -xzf mihomo.tar.gz
-          ls -R # 调试：列出解压后的所有文件
+          echo ">>> 正在解压..."
+          # 使用通配符解压下载到的文件
+          tar -xzf *.tar.gz
           
-          echo ">>> 寻找并重命名执行文件..."
-          # 更加稳健的寻找方式
-          find . -name "mihomo-linux-amd64*" -exec mv {} ./mihomo \;
+          echo ">>> 准备二进制文件..."
+          # 找到那个不带 .tar.gz 后缀的可执行文件并改名
+          find . -maxdepth 1 -type f -name "mihomo*" ! -name "*.tar.gz" -exec mv {} ./mihomo \;
           chmod +x ./mihomo
-          
-          echo ">>> 验证内核是否可用..."
           ./mihomo -v
 
       - name: Batch Convert Rulesets
         run: |
-          echo ">>> 检查 Manual 目录是否存在..."
-          # 自动兼容大小写问题
-          TARGET_DIR=""
-          if [ -d "Manual" ]; then TARGET_DIR="Manual"; elif [ -d "manual" ]; then TARGET_DIR="manual"; fi
+          # 定位目录
+          TARGET_DIR="Manual"
+          if [ ! -d "$TARGET_DIR" ]; then TARGET_DIR="manual"; fi
           
-          if [ -z "$TARGET_DIR" ]; then
-            echo "错误：找不到 Manual 或 manual 文件夹！"
-            ls -F # 调试：列出根目录所有内容
+          if [ ! -d "$TARGET_DIR" ]; then
+            echo "错误：未发现 Manual 或 manual 目录！"
             exit 1
           fi
 
-          echo ">>> 开始在 $TARGET_DIR 目录下转换..."
-          for file in $TARGET_DIR/*.yaml; do
-            if [ -f "$file" ]; then
-              filename="${file%.yaml}"
-              echo "转换: $file -> $filename.mrs"
-              # 使用完整路径防止出错
-              ./mihomo convert-ruleset text "$file" "$filename.mrs"
-            fi
+          echo ">>> 正在转换 $TARGET_DIR 目录下的规则..."
+          for file in "$TARGET_DIR"/*.yaml; do
+            [ -e "$file" ] || continue
+            filename="${file%.yaml}"
+            echo "转换中: $file -> $filename.mrs"
+            ./mihomo convert-ruleset text "$file" "$filename.mrs"
           done
 
       - name: Commit and Push Changes
@@ -63,8 +60,9 @@ jobs:
           
           git add .
           if git diff --cached --quiet; then
-            echo ">>> 无变动。"
+            echo ">>> 无变动，跳过推送。"
           else
-            git commit -m "auto: update mrs [skip ci]"
+            echo ">>> 发现变动，正在推送..."
+            git commit -m "auto: update ruleset [skip ci]"
             git push
           fi
