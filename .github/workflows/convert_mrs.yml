@@ -20,27 +20,35 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo ">>> 正在通过官方渠道下载 Mihomo..."
-          # 去掉不支持的 --limit 参数，使用更通用的通配符模式
-          gh release download --repo MetaCubeX/mihomo --pattern "mihomo-linux-amd64-v*.tar.gz"
+          echo ">>> 正在获取下载链接..."
+          # 使用 API 寻找最新版本中包含 linux-amd64 且以 .tar.gz 结尾的第一个资源
+          DOWNLOAD_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | \
+            jq -r '.assets[] | select(.name | contains("linux-amd64") and endswith(".tar.gz")) | .browser_download_url' | head -n 1)
+          
+          echo ">>> 正在下载: $DOWNLOAD_URL"
+          curl -L -o mihomo.tar.gz "$DOWNLOAD_URL"
           
           echo ">>> 正在解压..."
-          tar -xzf *.tar.gz
+          tar -xzf mihomo.tar.gz
           
           echo ">>> 准备二进制文件..."
-          # 将解压出来的内核重命名为 mihomo
-          find . -maxdepth 1 -type f -name "mihomo-linux-amd64*" ! -name "*.tar.gz" -exec mv {} ./mihomo \;
+          # 提取解压出来的二进制文件
+          mv mihomo-linux-amd64* mihomo 2>/dev/null || mv mihomo mihomo_bin 2>/dev/null || true
+          # 这里的逻辑是为了兼容不同的压缩包结构
+          [ -f "mihomo" ] || find . -maxdepth 1 -type f -name "mihomo*" ! -name "*.tar.gz" -exec mv {} ./mihomo \;
+          
           chmod +x ./mihomo
           ./mihomo -v
 
       - name: Batch Convert Rulesets
         run: |
-          # 自动识别目录名大小写
+          # 自动识别 Manual 目录（兼容大小写）
           TARGET_DIR="Manual"
-          if [ ! -d "$TARGET_DIR" ]; then TARGET_DIR="manual"; fi
+          [ -d "$TARGET_DIR" ] || TARGET_DIR="manual"
           
           if [ ! -d "$TARGET_DIR" ]; then
-            echo "错误：未发现 Manual 或 manual 目录！"
+            echo "错误：未发现 Manual 目录！当前目录结构如下："
             ls -R
             exit 1
           fi
