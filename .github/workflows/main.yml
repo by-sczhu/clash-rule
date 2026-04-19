@@ -1,34 +1,46 @@
-name: MRS Ruleset Converter
+name: Convert Ruleset to MRS
 on:
   push:
     paths:
-      - 'Manual/Direct.yaml' # 只有当你修改这个文件时才运行
-  workflow_dispatch:      # 允许你在 Actions 页面手动点运行
+      - 'Manual/*.yaml'  # 监控 Manual 文件夹下所有 yaml 变动
+  workflow_dispatch:      # 允许手动点击运行
 
 jobs:
-  build:
+  convert:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Mihomo
+      - name: Setup Mihomo
         run: |
-          # 获取最新版 Mihomo
-          MIHOMO_VERSION=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep tag_name | cut -d '"' -f 4)
-          curl -L -o mihomo.tar.gz https://github.com/MetaCubeX/mihomo/releases/download/${MIHOMO_VERSION}/mihomo-linux-amd64-${MIHOMO_VERSION}.tar.gz
+          # 获取最新版 Mihomo 核心
+          RELEASE_JSON=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest)
+          DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep -oP '"browser_download_url": "\K[^"]*linux-amd64[^"]*.gz' | head -n 1)
+          curl -L -o mihomo.tar.gz "$DOWNLOAD_URL"
           tar -xzf mihomo.tar.gz
+          # 重命名解压出的文件为 mihomo (由于版本号不同，通过通配符匹配)
+          mv mihomo-linux-amd64* mihomo 2>/dev/null || true
           chmod +x mihomo
 
-      - name: Convert YAML to MRS
+      - name: Batch Convert YAML to MRS
         run: |
-          # 执行转换 (text 代表输入的 yaml 格式)
-          ./mihomo convert-ruleset text Manual/Direct.yaml Manual/Direct.mrs
+          # 遍历 Manual 文件夹下所有 yaml 文件并转换
+          for file in Manual/*.yaml; do
+            filename=$(basename "$file" .yaml)
+            echo "Converting $filename.yaml to $filename.mrs..."
+            ./mihomo convert-ruleset text "$file" "Manual/$filename.mrs"
+          done
 
-      - name: Push Changes
+      - name: Commit and Push Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add Manual/Direct.mrs
-          # 只有在文件有变动时才提交，防止报错
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: auto-update Direct.mrs" && git push)
+          git add Manual/*.mrs
+          # 仅在有变动时提交
+          if ! git diff --staged --quiet; then
+            git commit -m "auto: update mrs rulesets"
+            git push
+          else
+            echo "No changes to commit"
+          fi
