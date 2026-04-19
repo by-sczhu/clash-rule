@@ -18,30 +18,30 @@ jobs:
 
       - name: Setup Mihomo
         run: |
-          echo "开始下载 Mihomo..."
-          # 直接使用 MetaCubeX 官方固定的最新版跳转链接，速度最快
-          curl -L -o mihomo.tar.gz "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz"
+          echo ">>> 正在下载 Mihomo 内核..."
+          # 使用 --connect-timeout 防止卡死
+          curl -L --connect-timeout 10 -o mihomo.tar.gz "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.3/mihomo-linux-amd64-v1.18.3.tar.gz"
           
-          echo "正在解压..."
+          echo ">>> 正在解压..."
           tar -xzf mihomo.tar.gz
           
-          echo "重命名二进制文件..."
-          # 这样写可以无视版本号，直接抓取解压出来的那个可执行文件
-          mv mihomo-linux-amd64* mihomo
+          # 自动寻找解压出来的执行文件（处理可能的版本号后缀）
+          EXECUTABLE=$(find . -name "mihomo-linux-amd64*" | head -n 1)
+          mv "$EXECUTABLE" ./mihomo
           chmod +x ./mihomo
-          
-          echo "当前 Mihomo 版本:"
+          echo ">>> 内核准备就绪:"
           ./mihomo -v
 
       - name: Batch Convert Rulesets
         run: |
-          echo "进入 Manual 文件夹转换..."
-          cd Manual
-          for file in *.yaml; do
-            [ -e "$file" ] || continue
-            filename="${file%.yaml}"
-            echo "转换中: $file -> $filename.mrs"
-            ../mihomo convert-ruleset text "$file" "$filename.mrs"
+          echo ">>> 开始批量转换 Manual 目录下的规则..."
+          # 直接在当前路径执行，使用相对路径调用内核
+          for file in Manual/*.yaml; do
+            if [ -f "$file" ]; then
+              filename="${file%.yaml}"
+              echo "转换: $file -> $filename.mrs"
+              ./mihomo convert-ruleset text "$file" "$filename.mrs"
+            fi
           done
 
       - name: Commit and Push Changes
@@ -50,10 +50,11 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
           git add Manual/*.mrs
-          if git diff --staged --quiet; then
-            echo "检查结果：没有文件发生变动。"
+          # 检查暂存区是否有变化
+          if git diff --cached --quiet; then
+            echo ">>> 无内容更新，跳过提交。"
           else
-            echo "发现变动，正在推送..."
+            echo ">>> 正在提交更新到仓库..."
             git commit -m "auto: 自动更新二进制规则集 [skip ci]"
             git push
           fi
